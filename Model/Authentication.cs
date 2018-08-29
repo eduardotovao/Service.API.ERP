@@ -7,6 +7,8 @@ namespace Service.API.ERP.Model
 {
     public class Authentication
     {
+        public bool Success { get; set; }
+
         [JsonProperty("access_token")]
         public string AccessToken { get; set; }
 

@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Serilog;
 using Service.API.ERP.Common;
 using Service.API.ERP.Interface;
 using Service.API.ERP.Model;
@@ -25,6 +26,8 @@ namespace Service.API.ERP.Integration
             _client = new HttpClient();
             _client.BaseAddress = new Uri(_config.GetUrl());
             _client.DefaultRequestHeaders.Clear();
+
+            Log.Information("ERP - Inicializar - {Link}", _config.GetUrl());
         }
 
         private async Task<Authentication> GetOauth()
@@ -39,14 +42,19 @@ namespace Service.API.ERP.Integration
 
             var content = new FormUrlEncodedContent(payload);
             var response = await _client.PostAsync("oauth/token", content);
+
+            result.Success = response.IsSuccessStatusCode;
+
             if (response.IsSuccessStatusCode)
             {
                 var information = response.Content.ReadAsStringAsync().Result;
                 result = JsonConvert.DeserializeObject<Authentication>(information);
+                Log.Information("ERP - Autenticação - Realizado - Expira: {Expires}", result.Expires);
             }
             else
             {
                 result.Message = response.RequestMessage.ToString();
+                Log.Error("ERP - Autenticação - Error: {Message}", result.Message);
             }
 
             return result;
@@ -98,7 +106,7 @@ namespace Service.API.ERP.Integration
                     { "Email",  request.Email },
                     { "Address",  request.AddressStreet },
                     { "AddressNumber",  request.AddressNumber },
-                    { "Complement",  request.AddressComplement },
+                    { "AddressComplement",  request.AddressComplement },
                     { "District",  request.AddressDistrict },
                     { "City",  request.AddressCity },
                     { "State",  request.AddressState },
@@ -117,6 +125,8 @@ namespace Service.API.ERP.Integration
                 _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sign.AccessToken);
                 var response = await _client.PostAsync("api/v3/addresquest", content);
 
+                result.Success = response.IsSuccessStatusCode;
+
                 if (response.IsSuccessStatusCode)
                 {
                     var information = response.Content.ReadAsStringAsync().Result;
@@ -126,6 +136,7 @@ namespace Service.API.ERP.Integration
                 {
                     var information = response.Content.ReadAsStringAsync().Result;
                     result = JsonConvert.DeserializeObject<RequestReturn>(information);
+                    Log.Error("ERP - Adicionar resgate - Error: {Message}", result.Message);
                 }
             }
 
@@ -145,6 +156,8 @@ namespace Service.API.ERP.Integration
 
                 var response = await _client.GetAsync(url);
 
+                result.Success = response.IsSuccessStatusCode;
+
                 if (response.IsSuccessStatusCode)
                 {
                     var information = response.Content.ReadAsStringAsync().Result;
@@ -154,6 +167,41 @@ namespace Service.API.ERP.Integration
                 {
                     var information = response.Content.ReadAsStringAsync().Result;
                     result.Message = response.RequestMessage.ToString();
+                    Log.Error("ERP - Buscar tracking - Error: {Message}", result.Message);
+                }
+            }
+
+            return result;
+        }
+
+        public async Task<UpdateCatalog> GetCatalog()
+        {
+            var result = new UpdateCatalog();
+
+            var sign = await GetOauth();
+
+            if (sign.IsAuthenticated)
+            {
+                var url = string.Format("api/v3/products?Token={0}", _config.GetToken());
+                _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sign.AccessToken);
+
+                var response = await _client.GetAsync(url);
+
+                result.Success = response.IsSuccessStatusCode;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var information = response.Content.ReadAsStringAsync().Result;
+                    result = JsonConvert.DeserializeObject<UpdateCatalog>(information, new JsonSerializerSettings
+                    {
+                        Culture = new CultureInfo("pt-BR")
+                    });
+                }
+                else
+                {
+                    var information = response.Content.ReadAsStringAsync().Result;
+                    result.Message = response.RequestMessage.ToString();
+                    Log.Error("ERP - Buscar catálogo - Error: {Message}", result.Message);
                 }
             }
 
